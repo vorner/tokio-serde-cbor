@@ -27,7 +27,7 @@ impl<'a, R: Read> Read for Counted<'a, R> {
             Ok(size) => {
                 *self.pos += size;
                 Ok(size)
-            }
+            },
             e => e,
         }
     }
@@ -56,7 +56,7 @@ impl<Item: Deserialize> IoDecoder for Decoder<Item> {
         // been eaten.
         let mut pos = 0;
         let result = {
-            let mut slice: &[u8] = &src;
+            let mut slice: &[u8] = src;
             let reader = Counted {
                 r: &mut slice,
                 pos: &mut pos,
@@ -72,7 +72,7 @@ impl<Item: Deserialize> IoDecoder for Decoder<Item> {
             Ok(item) => {
                 src.split_to(pos);
                 Ok(Some(item))
-            }
+            },
             // If it errors on not enough bytes, then we just signal we want to be called next
             // time.
             Err(CborError::Eof) => Ok(None),

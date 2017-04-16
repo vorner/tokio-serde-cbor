@@ -1,0 +1,6 @@
+verbose = true
+write_mode = "Diff"
+struct_trailing_comma = "Always"
+match_block_trailing_comma = true
+match_wildcard_trailing_comma = true
+use_try_shorthand = true
