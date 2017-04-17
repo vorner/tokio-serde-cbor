@@ -3,14 +3,15 @@ extern crate serde;
 extern crate serde_cbor;
 extern crate tokio_io;
 
-use std::io::{ErrorKind, Read, Result as IoResult};
+use std::io::{ErrorKind, Read, Result as IoResult, Write};
 use std::marker::PhantomData;
 
 use bytes::BytesMut;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_cbor::de::Deserializer;
 use serde_cbor::error::Error as CborError;
-use tokio_io::codec::Decoder as IoDecoder;
+use serde_cbor::ser::Serializer;
+use tokio_io::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// A `Read` wrapper that also counts the used bytes.
 ///
@@ -37,6 +38,7 @@ impl<'a, R: Read> Read for Counted<'a, R> {
 ///
 /// This decoder can be used with `tokio_io`'s `Framed` to decode CBOR encoded frames. Anything
 /// that is `serde`s `Deserialize` can be decoded this way.
+#[derive(Clone, Debug)]
 pub struct Decoder<Item> {
     _data: PhantomData<*const Item>,
 }
@@ -84,6 +86,97 @@ impl<Item: Deserialize> IoDecoder for Decoder<Item> {
     }
 }
 
+/// Describes the behaviour of self-describe tags.
+///
+/// CBOR defines a tag which can be used to recognize a document as being CBOR (it's sometimes
+/// called „magic“). This specifies if it should be present when encoding.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SdMode {
+    /// Places the tag in front of each encoded frame.
+    Always,
+    /// Places the tag in front of the first encoded frame.
+    Once,
+    /// Doesn't place the tag at all.
+    Never,
+}
+
+/// CBOR based encoder.
+///
+/// This encoder can be used with `tokio_io`'s `Framed` to encode CBOR frames. Anything
+/// that is `serde`s `Serialize` can be encoded this way (at least in theory, some values return
+/// errors when attempted to serialize).
+#[derive(Clone, Debug)]
+pub struct Encoder<Item> {
+    _data: PhantomData<*const Item>,
+    sd: SdMode,
+    packed: bool,
+}
+
+impl<Item: Serialize> Encoder<Item> {
+    /// Creates a new encoder.
+    ///
+    /// By default, it doesn't do packed encoding (it includes struct field names) and it doesn't
+    /// prefix the frames with self-describe tag.
+    pub fn new() -> Self {
+        Encoder {
+            _data: PhantomData,
+            sd: SdMode::Never,
+            packed: false,
+        }
+    }
+    /// Turns the encoder into one with confifured self-describe behaviour.
+    pub fn sd(self, sd: SdMode) -> Self {
+        Encoder { sd: sd, ..self }
+    }
+    /// Turns the encoder into one with configured packed encoding.
+    ///
+    /// If `packed` is true, it omits the field names from the encoded data. That makes it smaller,
+    /// but it also means the decoding end must know the exact order of fields and it can't be
+    /// something like python, which would want to get a dictionary out of it.
+    pub fn packed(self, packed: bool) -> Self {
+        Encoder {
+            packed: packed,
+            ..self
+        }
+    }
+}
+
+/// The Cbor serializer wants a writer, we provide one by wrapping `BytesMut`.
+///
+/// As of writing this code, `BytesMut` doesn't know how to be a writer itself. This may change,
+/// there's an open issue for it: https://github.com/carllerche/bytes/issues/77.
+struct BytesWriter<'a>(&'a mut BytesMut);
+
+impl<'a> Write for BytesWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.0.extend(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> IoResult<()> {
+        Ok(())
+    }
+}
+
+impl<Item: Serialize> IoEncoder for Encoder<Item> {
+    type Item = Item;
+    type Error = CborError;
+    fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), CborError> {
+        let writer = BytesWriter(dst);
+        let mut serializer = if self.packed {
+            Serializer::packed(writer)
+        } else {
+            Serializer::new(writer)
+        };
+        if self.sd != SdMode::Never {
+            serializer.self_describe()?;
+        }
+        if self.sd == SdMode::Once {
+            self.sd = SdMode::Never;
+        }
+        item.serialize(&mut serializer)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -92,12 +185,20 @@ mod tests {
 
     use super::*;
 
-    /// Try decoding CBOR based data.
-    #[test]
-    fn decode() {
+    type TestData = HashMap<String, usize>;
+
+    /// Something to test with. It doesn't really matter what it is.
+    fn test_data() -> TestData {
         let mut data = HashMap::new();
         data.insert("hello".to_owned(), 42usize);
         data.insert("world".to_owned(), 0usize);
+        data
+    }
+
+    /// Try decoding CBOR based data.
+    #[test]
+    fn decode() {
+        let data = test_data();
         let encoded = serde_cbor::to_vec(&data).unwrap();
         let mut all = BytesMut::with_capacity(128);
         // Put two copies and a bit into the buffer
@@ -105,7 +206,7 @@ mod tests {
         all.extend(&encoded);
         all.extend(&encoded[..1]);
         // Create the decoder
-        let mut decoder: Decoder<HashMap<String, usize>> = Decoder::new();
+        let mut decoder: Decoder<TestData> = Decoder::new();
         // We can now decode the first two copies
         let decoded = decoder.decode(&mut all).unwrap().unwrap();
         assert_eq!(data, decoded);
@@ -128,5 +229,27 @@ mod tests {
         decoder.decode(&mut all).unwrap_err();
         // All 5 bytes are still there
         assert_eq!(5, all.len());
+    }
+
+    /// Test encoding.
+    #[test]
+    fn encode() {
+        let data = test_data();
+        let mut encoder: Encoder<TestData> = Encoder::new().sd(SdMode::Once).packed(true);
+        let mut buffer = BytesMut::with_capacity(0);
+        encoder.encode(data.clone(), &mut buffer).unwrap();
+        let pos1 = buffer.len();
+        let decoded = serde_cbor::from_slice::<TestData>(&buffer).unwrap();
+        assert_eq!(data, decoded);
+        // Once more, this time without the self-describe (should be smaller)
+        encoder.encode(data.clone(), &mut buffer).unwrap();
+        let pos2 = buffer.len();
+        // More data arrived
+        assert!(pos2 > pos1);
+        // But not as much as twice as many
+        assert!(pos1 * 2 > pos2);
+        // We can still decode it
+        let decoded = serde_cbor::from_slice::<TestData>(&buffer[pos1..]).unwrap();
+        assert_eq!(data, decoded);
     }
 }
