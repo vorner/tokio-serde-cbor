@@ -3,6 +3,7 @@ extern crate serde;
 extern crate serde_cbor;
 extern crate tokio_io;
 
+use std::default::Default;
 use std::io::{ErrorKind, Read, Result as IoResult, Write};
 use std::marker::PhantomData;
 
@@ -46,7 +47,13 @@ pub struct Decoder<Item> {
 impl<Item: Deserialize> Decoder<Item> {
     /// Creates a new decoder.
     pub fn new() -> Self {
-        Decoder { _data: PhantomData }
+        Self { _data: PhantomData }
+    }
+}
+
+impl<Item: Deserialize> Default for Decoder<Item> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -118,7 +125,7 @@ impl<Item: Serialize> Encoder<Item> {
     /// By default, it doesn't do packed encoding (it includes struct field names) and it doesn't
     /// prefix the frames with self-describe tag.
     pub fn new() -> Self {
-        Encoder {
+        Self {
             _data: PhantomData,
             sd: SdMode::Never,
             packed: false,
@@ -126,7 +133,7 @@ impl<Item: Serialize> Encoder<Item> {
     }
     /// Turns the encoder into one with confifured self-describe behaviour.
     pub fn sd(self, sd: SdMode) -> Self {
-        Encoder { sd: sd, ..self }
+        Self { sd: sd, ..self }
     }
     /// Turns the encoder into one with configured packed encoding.
     ///
@@ -134,10 +141,16 @@ impl<Item: Serialize> Encoder<Item> {
     /// but it also means the decoding end must know the exact order of fields and it can't be
     /// something like python, which would want to get a dictionary out of it.
     pub fn packed(self, packed: bool) -> Self {
-        Encoder {
+        Self {
             packed: packed,
             ..self
         }
+    }
+}
+
+impl<Item: Serialize> Default for Encoder<Item> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -177,6 +190,71 @@ impl<Item: Serialize> IoEncoder for Encoder<Item> {
     }
 }
 
+/// Cbor serializer and deserializer.
+///
+/// This is just a combined [`Decoder`](struct.Decoder.html) and [`Encoder`](struct.Encoder.html).
+#[derive(Clone, Debug)]
+pub struct Codec<Dec: Deserialize, Enc: Serialize> {
+    dec: Decoder<Dec>,
+    enc: Encoder<Enc>,
+}
+
+impl<Dec: Deserialize, Enc: Serialize> Codec<Dec, Enc> {
+    /// Creates a new codec
+    pub fn new() -> Self {
+        Self {
+            dec: Decoder::new(),
+            enc: Encoder::new(),
+        }
+    }
+    /// Turns the internal encoder into one with confifured self-describe behaviour.
+    pub fn sd(self, sd: SdMode) -> Self {
+        Self {
+            dec: self.dec,
+            enc: Encoder {
+                sd: sd,
+                ..self.enc
+            },
+        }
+    }
+    /// Turns the internal encoder into one with configured packed encoding.
+    ///
+    /// If `packed` is true, it omits the field names from the encoded data. That makes it smaller,
+    /// but it also means the decoding end must know the exact order of fields and it can't be
+    /// something like python, which would want to get a dictionary out of it.
+    pub fn packed(self, packed: bool) -> Self {
+        Self {
+            dec: self.dec,
+            enc: Encoder {
+                packed: packed,
+                ..self.enc
+            },
+        }
+    }
+}
+
+impl<Dec: Deserialize, Enc: Serialize> Default for Codec<Dec, Enc> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<Dec: Deserialize, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
+    type Item = Dec;
+    type Error = CborError;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Dec>, CborError> {
+        self.dec.decode(src)
+    }
+}
+
+impl<Dec: Deserialize, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
+    type Item = Enc;
+    type Error = CborError;
+    fn encode(&mut self, item: Enc, dst: &mut BytesMut) -> Result<(), CborError> {
+        self.enc.encode(item, dst)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -196,8 +274,8 @@ mod tests {
     }
 
     /// Try decoding CBOR based data.
-    #[test]
-    fn decode() {
+    fn decode<Dec: IoDecoder<Item = TestData, Error = CborError>>(dec: Dec) {
+        let mut decoder = dec;
         let data = test_data();
         let encoded = serde_cbor::to_vec(&data).unwrap();
         let mut all = BytesMut::with_capacity(128);
@@ -205,8 +283,6 @@ mod tests {
         all.extend(&encoded);
         all.extend(&encoded);
         all.extend(&encoded[..1]);
-        // Create the decoder
-        let mut decoder: Decoder<TestData> = Decoder::new();
         // We can now decode the first two copies
         let decoded = decoder.decode(&mut all).unwrap().unwrap();
         assert_eq!(data, decoded);
@@ -231,11 +307,24 @@ mod tests {
         assert_eq!(5, all.len());
     }
 
-    /// Test encoding.
+    /// Run the decoding tests on the lone decoder.
     #[test]
-    fn encode() {
+    fn decode_only() {
+        let decoder = Decoder::new();
+        decode(decoder);
+    }
+
+    /// Run the decoding tests on the combined codec.
+    #[test]
+    fn decode_codec() {
+        let decoder: Codec<_, ()> = Codec::new();
+        decode(decoder);
+    }
+
+    /// Test encoding.
+    fn encode<Enc: IoEncoder<Item = TestData, Error = CborError>>(enc: Enc) {
+        let mut encoder = enc;
         let data = test_data();
-        let mut encoder: Encoder<TestData> = Encoder::new().sd(SdMode::Once).packed(true);
         let mut buffer = BytesMut::with_capacity(0);
         encoder.encode(data.clone(), &mut buffer).unwrap();
         let pos1 = buffer.len();
@@ -251,5 +340,30 @@ mod tests {
         // We can still decode it
         let decoded = serde_cbor::from_slice::<TestData>(&buffer[pos1..]).unwrap();
         assert_eq!(data, decoded);
+        // Encoding once more the size stays the same
+        encoder.encode(data.clone(), &mut buffer).unwrap();
+        let pos3 = buffer.len();
+        assert_eq!(pos2 - pos1, pos3 - pos2);
+    }
+
+    /// Test encoding by the lone encoder.
+    #[test]
+    fn encode_only() {
+        let encoder = Encoder::new().sd(SdMode::Once);
+        encode(encoder);
+    }
+
+    /// The same as `encode_only`, but with packed encoding.
+    #[test]
+    fn encode_packed() {
+        let encoder = Encoder::new().packed(true).sd(SdMode::Once);
+        encode(encoder);
+    }
+
+    /// Encoding with the combined `Codec`
+    #[test]
+    fn encode_codec() {
+        let encoder: Codec<(), _> = Codec::new().sd(SdMode::Once);
+        encode(encoder);
     }
 }
