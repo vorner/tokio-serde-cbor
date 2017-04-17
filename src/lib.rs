@@ -227,10 +227,7 @@ impl<Dec: Deserialize, Enc: Serialize> Codec<Dec, Enc> {
     pub fn sd(self, sd: SdMode) -> Self {
         Self {
             dec: self.dec,
-            enc: Encoder {
-                sd: sd,
-                ..self.enc
-            },
+            enc: Encoder { sd: sd, ..self.enc },
         }
     }
     /// Turns the internal encoder into one with configured packed encoding.
