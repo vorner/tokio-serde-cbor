@@ -1,3 +1,15 @@
+//! This crate integrates CBOR into Tokio.
+//!
+//! This crate provides a codec for framing information as CBOR encoded messages. It allows
+//! encoding and decoding arbitrary [serde](https://serde.rs) ready types. It can be used by
+//! plugging the codec into the connection's `framed` method to get stream and sink of the desired
+//! items.
+//!
+//! The encoded and decoded items are independent (you may want to encode references and decode
+//! owned data, or the protocol might be asymetric). If you want just one direction, you can use
+//! [`Decoder`](struct.Decoder.html) or [`Encoder`](struct.Encoder.html). If you want both, you
+//! better use [`Codec`](struct.Codec.html).
+
 extern crate bytes;
 extern crate serde;
 extern crate serde_cbor;
