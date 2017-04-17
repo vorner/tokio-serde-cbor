@@ -2,6 +2,17 @@
 name = "tokio-serde-cbor"
 version = "0.1.0"
 authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+description = "Integration of serde_cbor into tokio-io, to allow sending CBOR encoded frames across network (and possibly through other transports)."
+documentation = "https://docs.rs/tokio-serde-cbor"
+repository = "https://github.com/vorner/tokio-serde-cbor"
+readme = "README.md"
+keywords = ["cbor", "tokio", "framing"]
+categories = ["asynchronous", "network-programming"]
+license = "Apache-2.0/MIT"
+
+[badges]
+travis-ci = { repository = "vorner/tokio-serde-cbor" }
+appveyor = { repository = "vorner/tokio-serde-cbor" }
 
 [dependencies]
 bytes = "~0.4"

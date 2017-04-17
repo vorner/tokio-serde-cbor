@@ -3,12 +3,17 @@
 [![Travis Build Status](https://api.travis-ci.org/vorner/tokio-serde-cbor.png?branch=master)](https://travis-ci.org/vorner/tokio-serde-cbor)
 [![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/omgsa9hhwd5cpmmc/branch/master?svg=true)](https://ci.appveyor.com/project/vorner/tokio-serde-cbor/branch/master)
 
-This integrates the [`serde-cbor`](https://crates.io/crates/serde-cbor) into a
-codec (`Decoder` and `Encoder`) of
-[`tokio-io`](https://crates.io/crates/tokio-io). This allows turning an async
-read/write into a stream and sink of objects.
+This rust crate integrates the
+[`serde-cbor`](https://crates.io/crates/serde-cbor) into a codec (`Decoder` and
+`Encoder`) of [`tokio-io`](https://crates.io/crates/tokio-io). This allows
+turning an async read/write into a stream and sink of objects.
 
 The API documentation can be found [here](https://docs.rs/tokio-serde-cbor).
+
+## Status
+
+The API is not formally stabilized and may change. But the crate itself is
+small and there's probably not much space for such changes.
 
 ## License
 

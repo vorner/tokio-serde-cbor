@@ -9,6 +9,10 @@
 //! owned data, or the protocol might be asymetric). If you want just one direction, you can use
 //! [`Decoder`](struct.Decoder.html) or [`Encoder`](struct.Encoder.html). If you want both, you
 //! better use [`Codec`](struct.Codec.html).
+//!
+//! Note that this is useful if the CBOR itself defines the frames. If the messages are delimited
+//! in some other way (eg. length-prefix encoding) and CBOR is only the payload, you'd use a codec
+//! for the other framing and use `.map` on the received stream and sink to convert the messages.
 
 extern crate bytes;
 extern crate serde;
