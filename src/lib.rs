@@ -60,20 +60,20 @@ pub struct Decoder<Item> {
     _data: PhantomData<*const Item>,
 }
 
-impl<Item: Deserialize> Decoder<Item> {
+impl<'de, Item: Deserialize<'de>> Decoder<Item> {
     /// Creates a new decoder.
     pub fn new() -> Self {
         Self { _data: PhantomData }
     }
 }
 
-impl<Item: Deserialize> Default for Decoder<Item> {
+impl<'de, Item: Deserialize<'de>> Default for Decoder<Item> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<Item: Deserialize> IoDecoder for Decoder<Item> {
+impl<'de, Item: Deserialize<'de>> IoDecoder for Decoder<Item> {
     type Item = Item;
     type Error = CborError;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Item>, CborError> {
@@ -98,9 +98,6 @@ impl<Item: Deserialize> IoDecoder for Decoder<Item> {
                 src.split_to(pos);
                 Ok(Some(item))
             },
-            // If it errors on not enough bytes, then we just signal we want to be called next
-            // time.
-            Err(CborError::Eof) => Ok(None),
             // Sometimes the EOF is signalled as IO error
             Err(CborError::Io(ref io)) if io.kind() == ErrorKind::UnexpectedEof => Ok(None),
             // Any other error is simply passed through.
@@ -210,12 +207,12 @@ impl<Item: Serialize> IoEncoder for Encoder<Item> {
 ///
 /// This is just a combined [`Decoder`](struct.Decoder.html) and [`Encoder`](struct.Encoder.html).
 #[derive(Clone, Debug)]
-pub struct Codec<Dec: Deserialize, Enc: Serialize> {
+pub struct Codec<Dec, Enc> {
     dec: Decoder<Dec>,
     enc: Encoder<Enc>,
 }
 
-impl<Dec: Deserialize, Enc: Serialize> Codec<Dec, Enc> {
+impl<'de, Dec: Deserialize<'de>, Enc: Serialize> Codec<Dec, Enc> {
     /// Creates a new codec
     pub fn new() -> Self {
         Self {
@@ -246,13 +243,13 @@ impl<Dec: Deserialize, Enc: Serialize> Codec<Dec, Enc> {
     }
 }
 
-impl<Dec: Deserialize, Enc: Serialize> Default for Codec<Dec, Enc> {
+impl<'de, Dec: Deserialize<'de>, Enc: Serialize> Default for Codec<Dec, Enc> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<Dec: Deserialize, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
+impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
     type Item = Dec;
     type Error = CborError;
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Dec>, CborError> {
@@ -260,7 +257,7 @@ impl<Dec: Deserialize, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
     }
 }
 
-impl<Dec: Deserialize, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
+impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
     type Item = Enc;
     type Error = CborError;
     fn encode(&mut self, item: Enc, dst: &mut BytesMut) -> Result<(), CborError> {
