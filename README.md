@@ -1,4 +1,4 @@
-# Tokio-JSONRPC
+# Tokio-serde-cbor
 
 [![Travis Build Status](https://api.travis-ci.org/vorner/tokio-serde-cbor.png?branch=master)](https://travis-ci.org/vorner/tokio-serde-cbor)
 [![AppVeyor Build status](https://ci.appveyor.com/api/projects/status/omgsa9hhwd5cpmmc/branch/master?svg=true)](https://ci.appveyor.com/project/vorner/tokio-serde-cbor/branch/master)
