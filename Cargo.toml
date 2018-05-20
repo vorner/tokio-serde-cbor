@@ -11,6 +11,7 @@ categories = ["asynchronous", "network-programming"]
 license = "Apache-2.0/MIT"
 
 [badges]
+maintenance = { status = "passively-maintained" }
 travis-ci = { repository = "vorner/tokio-serde-cbor" }
 appveyor = { repository = "vorner/tokio-serde-cbor" }
 
