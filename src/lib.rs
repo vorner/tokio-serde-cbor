@@ -146,7 +146,7 @@ impl<Item: Serialize> Encoder<Item> {
     }
     /// Turns the encoder into one with confifured self-describe behaviour.
     pub fn sd(self, sd: SdMode) -> Self {
-        Self { sd: sd, ..self }
+        Self { sd, ..self }
     }
     /// Turns the encoder into one with configured packed encoding.
     ///
@@ -154,10 +154,7 @@ impl<Item: Serialize> Encoder<Item> {
     /// but it also means the decoding end must know the exact order of fields and it can't be
     /// something like python, which would want to get a dictionary out of it.
     pub fn packed(self, packed: bool) -> Self {
-        Self {
-            packed: packed,
-            ..self
-        }
+        Self { packed, ..self }
     }
 }
 
@@ -224,7 +221,7 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> Codec<Dec, Enc> {
     pub fn sd(self, sd: SdMode) -> Self {
         Self {
             dec: self.dec,
-            enc: Encoder { sd: sd, ..self.enc },
+            enc: Encoder { sd, ..self.enc },
         }
     }
     /// Turns the internal encoder into one with configured packed encoding.
@@ -235,10 +232,7 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> Codec<Dec, Enc> {
     pub fn packed(self, packed: bool) -> Self {
         Self {
             dec: self.dec,
-            enc: Encoder {
-                packed: packed,
-                ..self.enc
-            },
+            enc: Encoder { packed, ..self.enc },
         }
     }
 }
