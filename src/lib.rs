@@ -20,15 +20,58 @@ extern crate serde_cbor;
 extern crate tokio_io;
 
 use std::default::Default;
-use std::io::{ErrorKind, Read, Result as IoResult, Write};
+use std::error::Error as ErrorTrait;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::io::{Error as IoError, Read, Result as IoResult, Write};
 use std::marker::PhantomData;
 
 use bytes::BytesMut;
 use serde::{Deserialize, Serialize};
-use serde_cbor::de::Deserializer;
+use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
 use serde_cbor::ser::Serializer;
 use tokio_io::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
+
+/// Errors returned by encoding and decoding.
+#[derive(Debug)]
+pub enum Error {
+    Io(IoError),
+    Cbor(CborError),
+    #[doc(hidden)]
+    __NonExhaustive__,
+}
+
+impl From<IoError> for Error {
+    fn from(error: IoError) -> Self {
+        Error::Io(error)
+    }
+}
+
+impl From<CborError> for Error {
+    fn from(error: CborError) -> Self {
+        Error::Cbor(error)
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        match self {
+            Error::Io(e) => e.fmt(fmt),
+            Error::Cbor(e) => e.fmt(fmt),
+            Error::__NonExhaustive__ => unreachable!(),
+        }
+    }
+}
+
+impl ErrorTrait for Error {
+    fn source(&self) -> Option<&(ErrorTrait + 'static)> {
+        match self {
+            Error::Io(e) => Some(e),
+            Error::Cbor(e) => Some(e),
+            Error::__NonExhaustive__ => unreachable!(),
+        }
+    }
+}
 
 /// A `Read` wrapper that also counts the used bytes.
 ///
@@ -75,10 +118,8 @@ impl<'de, Item: Deserialize<'de>> Default for Decoder<Item> {
 
 impl<'de, Item: Deserialize<'de>> IoDecoder for Decoder<Item> {
     type Item = Item;
-    type Error = CborError;
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Item>, CborError> {
-        // Try to read the value using the Cbor's deserializer, but keep track of how many data has
-        // been eaten.
+    type Error = Error;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Item>, Error> {
         let mut pos = 0;
         let result = {
             let mut slice: &[u8] = src;
@@ -86,6 +127,7 @@ impl<'de, Item: Deserialize<'de>> IoDecoder for Decoder<Item> {
                 r: &mut slice,
                 pos: &mut pos,
             };
+            let reader = IoRead::new(reader);
             // Use the deserializer directly, instead of using `deserialize_from`. We explicitly do
             // *not* want to check that there are no trailing bytes ‒ there may be, and they are
             // the next frame.
@@ -99,9 +141,9 @@ impl<'de, Item: Deserialize<'de>> IoDecoder for Decoder<Item> {
                 Ok(Some(item))
             },
             // Sometimes the EOF is signalled as IO error
-            Err(CborError::Io(ref io)) if io.kind() == ErrorKind::UnexpectedEof => Ok(None),
+            Err(ref error) if error.is_eof() => Ok(None),
             // Any other error is simply passed through.
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
 }
@@ -182,8 +224,8 @@ impl<'a> Write for BytesWriter<'a> {
 
 impl<Item: Serialize> IoEncoder for Encoder<Item> {
     type Item = Item;
-    type Error = CborError;
-    fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), CborError> {
+    type Error = Error;
+    fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Error> {
         let writer = BytesWriter(dst);
         let mut serializer = if self.packed {
             Serializer::packed(writer)
@@ -196,7 +238,7 @@ impl<Item: Serialize> IoEncoder for Encoder<Item> {
         if self.sd == SdMode::Once {
             self.sd = SdMode::Never;
         }
-        item.serialize(&mut serializer)
+        item.serialize(&mut serializer).map_err(Into::into)
     }
 }
 
@@ -245,16 +287,16 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> Default for Codec<Dec, Enc> {
 
 impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
     type Item = Dec;
-    type Error = CborError;
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Dec>, CborError> {
+    type Error = Error;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Dec>, Error> {
         self.dec.decode(src)
     }
 }
 
 impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
     type Item = Enc;
-    type Error = CborError;
-    fn encode(&mut self, item: Enc, dst: &mut BytesMut) -> Result<(), CborError> {
+    type Error = Error;
+    fn encode(&mut self, item: Enc, dst: &mut BytesMut) -> Result<(), Error> {
         self.enc.encode(item, dst)
     }
 }
@@ -278,7 +320,7 @@ mod tests {
     }
 
     /// Try decoding CBOR based data.
-    fn decode<Dec: IoDecoder<Item = TestData, Error = CborError>>(dec: Dec) {
+    fn decode<Dec: IoDecoder<Item = TestData, Error = Error>>(dec: Dec) {
         let mut decoder = dec;
         let data = test_data();
         let encoded = serde_cbor::to_vec(&data).unwrap();
@@ -326,7 +368,7 @@ mod tests {
     }
 
     /// Test encoding.
-    fn encode<Enc: IoEncoder<Item = TestData, Error = CborError>>(enc: Enc) {
+    fn encode<Enc: IoEncoder<Item = TestData, Error = Error>>(enc: Enc) {
         let mut encoder = enc;
         let data = test_data();
         let mut buffer = BytesMut::with_capacity(0);

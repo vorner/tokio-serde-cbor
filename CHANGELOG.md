@@ -1,3 +1,7 @@
+# 0.3.0
+
+* cbor version bump.
+
 # 0.2.1
 
 * Depend on non-alpha cbor.
