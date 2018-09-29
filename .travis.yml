@@ -9,8 +9,8 @@ os:
     - osx
 before_script:
     - |
-      (travis_wait cargo install rustfmt || true) &&
-      (test "$TRAVIS_RUST_VERSION" != nightly || travis_wait cargo install --force clippy || true)
+      (rustup component add rustfmt-preview || true) &&
+      (rustup component add clippy-preview || true)
 
 script:
     - |

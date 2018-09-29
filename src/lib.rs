@@ -64,7 +64,7 @@ impl Display for Error {
 }
 
 impl ErrorTrait for Error {
-    fn source(&self) -> Option<&(ErrorTrait + 'static)> {
+    fn cause(&self) -> Option<&ErrorTrait> {
         match self {
             Error::Io(e) => Some(e),
             Error::Cbor(e) => Some(e),
