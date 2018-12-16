@@ -1,3 +1,7 @@
+# 0.3.1
+
+* Make the encoder and decoder send and sync.
+
 # 0.3.0
 
 * cbor version bump.

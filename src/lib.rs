@@ -100,7 +100,7 @@ impl<'a, R: Read> Read for Counted<'a, R> {
 /// that is `serde`s `Deserialize` can be decoded this way.
 #[derive(Clone, Debug)]
 pub struct Decoder<Item> {
-    _data: PhantomData<*const Item>,
+    _data: PhantomData<fn() -> Item>,
 }
 
 impl<'de, Item: Deserialize<'de>> Decoder<Item> {
@@ -169,7 +169,7 @@ pub enum SdMode {
 /// errors when attempted to serialize).
 #[derive(Clone, Debug)]
 pub struct Encoder<Item> {
-    _data: PhantomData<*const Item>,
+    _data: PhantomData<fn(Item)>,
     sd: SdMode,
     packed: bool,
 }
@@ -304,6 +304,7 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use serde_cbor;
 
@@ -411,5 +412,23 @@ mod tests {
     fn encode_codec() {
         let encoder: Codec<(), _> = Codec::new().sd(SdMode::Once);
         encode(encoder);
+    }
+
+    /// Checks that the codec can be send
+    #[test]
+    fn is_send() {
+        let codec: Codec<(), ()> = Codec::new();
+        std::thread::spawn(move || {
+            let _c = codec;
+        });
+    }
+
+    /// Checks that the codec can be send
+    #[test]
+    fn is_sync() {
+        let codec: Arc<Codec<(), ()>> = Arc::new(Codec::new());
+        std::thread::spawn(move || {
+            let _c = codec;
+        });
     }
 }
