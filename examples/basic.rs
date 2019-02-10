@@ -1,70 +1,75 @@
-#![deny(warnings)]
-
-extern crate tokio_uds;
 extern crate tokio;
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate serde;
-
 extern crate tokio_serde_cbor;
 
+use std::net::{TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 
 use tokio::prelude::*;
-use tokio_codec::Decoder;
-use tokio_uds::UnixStream;
+use tokio::codec::Decoder;
+use tokio::net::tcp::TcpStream;
+use tokio::reactor::Handle;
+use tokio::runtime::Runtime;
 
 use tokio_serde_cbor::Codec;
 
 use std::collections::HashMap;
 
+type Error = Box<dyn std::error::Error + Send + Sync>;
 
 // We create some test data to serialize. This works because Serde implements
 // Serialize and Deserialize for HashMap, so the codec can frame this type.
-//
 type TestData = HashMap<String, usize>;
 
 /// Something to test with. It doesn't really matter what it is.
 fn test_data() -> TestData {
 	let mut data = HashMap::new();
-	data.insert("hello".to_owned(), 42usize);
-	data.insert("world".to_owned(), 0usize);
+	data.insert("hello".to_owned(), 42);
+	data.insert("world".to_owned(), 0);
 	data
 }
 
+/// Creates a connected pair of sockets.
+///
+/// This is similar to UnixStream::socket_pair, but works on windows too.
+///
+/// This is blocking, so it arguably doesn't belong into an async application, but this is not the
+/// point of the example here.
+fn socket_pair() -> Result<(TcpStream, TcpStream), Error> {
+    // port 0 = let the OS choose
+    let listener = StdTcpListener::bind("127.0.0.1:0")?;
+    let stream1 = StdTcpStream::connect(listener.local_addr()?)?;
+    let stream2 = listener.accept()?.0;
+    let stream1 = TcpStream::from_std(stream1, &Handle::default())?;
+    let stream2 = TcpStream::from_std(stream2, &Handle::default())?;
+    Ok((stream1, stream2))
+}
 
-fn main() -> Result<(), Box<std::error::Error>>
-{
-	// This creates a pair of unix domain sockets that are connected together.
-	//
-	let (socket_a, socket_b) = UnixStream::pair().expect( "Could not create pair of sockets" );
+fn main() -> Result<(), Error> {
+	// This creates a pair of TCP domain sockets that are connected together.
+	let (sender_socket, receiver_socket) = socket_pair()?;
 
 	// Create the codec, type annotations are needed here.
-	//
 	let codec: Codec<TestData, TestData> = Codec::new();
 
-	// Get read and write parts of our streams
-	//
-	let (sink_a, _stream_a) = codec.clone().framed( socket_a ).split();
-	let (_sink_b, stream_b) = codec        .framed( socket_b ).split();
+	// Get read and write parts of our streams (we ignore the other directions, but we could
+        // .split() them if we wanted to talk both ways).
+	let sender = codec.clone().framed(sender_socket);
+	let receiver = codec.framed(receiver_socket);
 
 	// This is the data we will send over.
-	//
-	let data = test_data();
-	let data2 = test_data();
+	let msg1 = test_data();
+	let msg2 = test_data();
 
-	// Send method comes from tokio::AsyncWrite it will return a future we can spawn with tokio.
-	// It consumes self, so we need to chain the next send with then. It returns a result,
-	// so normally you would have to properly map the error, but here we just bail with expect.
-	//
-	let af =
-
-		sink_a.send( data )
-		.then( |sink| sink.expect( "First send failed" ).send( data2 ) );
+        // Send method comes from Sink and it will return a future we can spawn with tokio.
+        // It consumes self, so we need to chain the next send with then.
+	let send_all = sender
+            .send(msg1)
+            .and_then(|sender| sender.send(msg2))
+            // Close the sink (otherwise it would get returned throughout the join and block_on and
+            // the for_each would wait for more messages).
+            .map(|sender| drop(sender));
 
 	// for each frame, thus for each entire object we receive.
-	//
-	let bf = stream_b.for_each( |msg|
-	{
+	let recv_all = receiver.for_each(|msg| {
 		println!( "Received: {:#?}", msg );
 
 		Ok(())
@@ -72,13 +77,8 @@ fn main() -> Result<(), Box<std::error::Error>>
 	});
 
 
-	// Spawn the sender of pongs and then wait for our pinger to finish.
-	tokio::run(
-	{
-		bf.join( af )//.join( af2 )
-		  .map_err(|e| println!("error = {:?}", e))
-		  .map(|_| {std::process::exit(0);})
-	});
+        Runtime::new()?
+            .block_on_all(send_all.join(recv_all))?;
 
 	Ok(())
 }
