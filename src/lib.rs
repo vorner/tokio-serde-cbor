@@ -24,7 +24,7 @@ use bytes::BytesMut;
 use serde::{Deserialize, Serialize};
 use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
-use serde_cbor::ser::Serializer;
+use serde_cbor::ser::{IoWrite, Serializer};
 use tokio_io::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// Errors returned by encoding and decoding.
@@ -223,9 +223,9 @@ impl<Item: Serialize> IoEncoder for Encoder<Item> {
     fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Error> {
         let writer = BytesWriter(dst);
         let mut serializer = if self.packed {
-            Serializer::packed(writer)
+            Serializer::new(IoWrite::new(writer)).packed_format()
         } else {
-            Serializer::new(writer)
+            Serializer::new(IoWrite::new(writer))
         };
         if self.sd != SdMode::Never {
             serializer.self_describe()?;
