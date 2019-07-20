@@ -14,11 +14,6 @@
 //! in some other way (eg. length-prefix encoding) and CBOR is only the payload, you'd use a codec
 //! for the other framing and use `.map` on the received stream and sink to convert the messages.
 
-extern crate bytes;
-extern crate serde;
-extern crate serde_cbor;
-extern crate tokio_io;
-
 use std::default::Default;
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -64,7 +59,7 @@ impl Display for Error {
 }
 
 impl ErrorTrait for Error {
-    fn cause(&self) -> Option<&ErrorTrait> {
+    fn cause(&self) -> Option<&dyn ErrorTrait> {
         match self {
             Error::Io(e) => Some(e),
             Error::Cbor(e) => Some(e),
