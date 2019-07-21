@@ -14,11 +14,6 @@
 //! in some other way (eg. length-prefix encoding) and CBOR is only the payload, you'd use a codec
 //! for the other framing and use `.map` on the received stream and sink to convert the messages.
 
-extern crate bytes;
-extern crate serde;
-extern crate serde_cbor;
-extern crate tokio_io;
-
 use std::default::Default;
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -29,7 +24,7 @@ use bytes::BytesMut;
 use serde::{Deserialize, Serialize};
 use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
-use serde_cbor::ser::Serializer;
+use serde_cbor::ser::{IoWrite, Serializer};
 use tokio_io::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// Errors returned by encoding and decoding.
@@ -64,7 +59,7 @@ impl Display for Error {
 }
 
 impl ErrorTrait for Error {
-    fn cause(&self) -> Option<&ErrorTrait> {
+    fn cause(&self) -> Option<&dyn ErrorTrait> {
         match self {
             Error::Io(e) => Some(e),
             Error::Cbor(e) => Some(e),
@@ -228,9 +223,9 @@ impl<Item: Serialize> IoEncoder for Encoder<Item> {
     fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Error> {
         let writer = BytesWriter(dst);
         let mut serializer = if self.packed {
-            Serializer::packed(writer)
+            Serializer::new(IoWrite::new(writer)).packed_format()
         } else {
-            Serializer::new(writer)
+            Serializer::new(IoWrite::new(writer))
         };
         if self.sd != SdMode::Never {
             serializer.self_describe()?;
