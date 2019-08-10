@@ -13,6 +13,10 @@
 //! Note that this is useful if the CBOR itself defines the frames. If the messages are delimited
 //! in some other way (eg. length-prefix encoding) and CBOR is only the payload, you'd use a codec
 //! for the other framing and use `.map` on the received stream and sink to convert the messages.
+//!
+//! ## Features
+//! This crate has an optional dependency: `futures_codec`. When enabled it will allow you to frame
+//! `AsyncRead`/`AsyncWrite` from the futures 0.3 crate. See the `futures` example in the example directory.
 
 use std::default::Default;
 use std::error::Error as ErrorTrait;
@@ -25,7 +29,12 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
 use serde_cbor::ser::{IoWrite, Serializer};
+
+#[cfg(not(feature="futures_codec"))]
 use tokio_io::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
+
+#[cfg(feature="futures_codec")]
+use futures_codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// Errors returned by encoding and decoding.
 #[derive(Debug)]

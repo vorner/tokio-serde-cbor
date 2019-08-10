@@ -10,6 +10,10 @@ turning an async read/write into a stream and sink of objects.
 
 The API documentation can be found [here](https://docs.rs/tokio-serde-cbor).
 
+## Features
+This crate has an optional dependency: `futures_codec`. When enabled it will allow you to frame
+`AsyncRead`/`AsyncWrite` from the futures 0.3 crate. See the `futures` example in the example directory.
+
 ## Status
 
 The API is not formally stabilized and may change. But the crate itself is

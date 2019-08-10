@@ -1,6 +1,3 @@
-extern crate tokio;
-extern crate tokio_serde_cbor;
-
 use std::net::{TcpListener as StdTcpListener, TcpStream as StdTcpStream};
 
 use tokio::codec::Decoder;
