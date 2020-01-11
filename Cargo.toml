@@ -1,7 +1,10 @@
 [package]
 name = "tokio-serde-cbor"
 version = "0.3.2"
-authors = ["Michal 'vorner' Vaner <vorner@vorner.cz>"]
+authors = [
+    "Michal 'vorner' Vaner <vorner@vorner.cz>",
+    "Vadym S. Khondar <vadym@khondar.name>",
+]
 description = "Integration of serde_cbor into tokio-io, to allow sending CBOR encoded frames across network (and possibly through other transports)."
 documentation = "https://docs.rs/tokio-serde-cbor"
 repository = "https://github.com/vorner/tokio-serde-cbor"
