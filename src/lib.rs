@@ -20,12 +20,13 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::io::{Error as IoError, Read, Result as IoResult, Write};
 use std::marker::PhantomData;
 
+use bytes::Buf;
 use bytes::BytesMut;
 use serde::{Deserialize, Serialize};
 use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
 use serde_cbor::ser::{IoWrite, Serializer};
-use tokio_io::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
+use tokio_util::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// Errors returned by encoding and decoding.
 #[derive(Debug)]
@@ -83,7 +84,7 @@ impl<'a, R: Read> Read for Counted<'a, R> {
             Ok(size) => {
                 *self.pos += size;
                 Ok(size)
-            },
+            }
             e => e,
         }
     }
@@ -132,9 +133,9 @@ impl<'de, Item: Deserialize<'de>> IoDecoder for Decoder<Item> {
         match result {
             // If we read the item, we also need to consume the corresponding bytes.
             Ok(item) => {
-                src.split_to(pos);
+                src.advance(pos);
                 Ok(Some(item))
-            },
+            }
             // Sometimes the EOF is signalled as IO error
             Err(ref error) if error.is_eof() => Ok(None),
             // Any other error is simply passed through.
