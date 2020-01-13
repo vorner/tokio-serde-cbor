@@ -384,7 +384,7 @@ mod tests {
         let decoded = serde_cbor::from_slice::<TestData>(&buffer[pos1..]).unwrap();
         assert_eq!(data, decoded);
         // Encoding once more the size stays the same
-        encoder.encode(data.clone(), &mut buffer).unwrap();
+        encoder.encode(data, &mut buffer).unwrap();
         let pos3 = buffer.len();
         assert_eq!(pos2 - pos1, pos3 - pos2);
     }
