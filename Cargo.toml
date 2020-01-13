@@ -1,6 +1,6 @@
 [package]
 name = "tokio-serde-cbor"
-version = "0.3.2"
+version = "0.4.0"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Vadym S. Khondar <vadym@khondar.name>",
@@ -22,7 +22,7 @@ appveyor = { repository = "vorner/tokio-serde-cbor" }
 [dependencies]
 bytes = "~0.5"
 serde = "~1"
-serde_cbor = "~0.10"
+serde_cbor = "~0.11.1"
 tokio-util = { version = "~0.2", features = ["codec"] }
 
 [dev-dependencies]

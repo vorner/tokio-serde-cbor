@@ -1,3 +1,6 @@
+* Update to tokio 0.2.
+* Update to serde-cbor 0.11.
+
 # 0.3.1
 
 * Make the encoder and decoder send and sync.
