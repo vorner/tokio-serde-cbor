@@ -17,11 +17,10 @@
 use std::default::Default;
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::io::{Error as IoError, Read, Result as IoResult, Write};
+use std::io::{Error as IoError, Read, Result as IoResult};
 use std::marker::PhantomData;
 
-use bytes::Buf;
-use bytes::BytesMut;
+use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
@@ -202,30 +201,13 @@ impl<Item: Serialize> Default for Encoder<Item> {
     }
 }
 
-/// The Cbor serializer wants a writer, we provide one by wrapping `BytesMut`.
-///
-/// As of writing this code, `BytesMut` doesn't know how to be a writer itself. This may change,
-/// there's an open issue for it: https://github.com/carllerche/bytes/issues/77.
-struct BytesWriter<'a>(&'a mut BytesMut);
-
-impl<'a> Write for BytesWriter<'a> {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.0.extend(buf);
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> IoResult<()> {
-        Ok(())
-    }
-}
-
 impl<Item: Serialize> IoEncoder<Item> for Encoder<Item> {
     type Error = Error;
     fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Error> {
-        let writer = BytesWriter(dst);
         let mut serializer = if self.packed {
-            Serializer::new(IoWrite::new(writer)).packed_format()
+            Serializer::new(IoWrite::new(dst.writer())).packed_format()
         } else {
-            Serializer::new(IoWrite::new(writer))
+            Serializer::new(IoWrite::new(dst.writer()))
         };
         if self.sd != SdMode::Never {
             serializer.self_describe()?;
