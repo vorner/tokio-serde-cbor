@@ -17,11 +17,10 @@
 use std::default::Default;
 use std::error::Error as ErrorTrait;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::io::{Error as IoError, Read, Result as IoResult, Write};
+use std::io::{Error as IoError, Read, Result as IoResult};
 use std::marker::PhantomData;
 
-use bytes::Buf;
-use bytes::BytesMut;
+use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 use serde_cbor::de::{Deserializer, IoRead};
 use serde_cbor::error::Error as CborError;
@@ -30,11 +29,10 @@ use tokio_util::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// Errors returned by encoding and decoding.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     Io(IoError),
     Cbor(CborError),
-    #[doc(hidden)]
-    __NonExhaustive__,
 }
 
 impl From<IoError> for Error {
@@ -54,7 +52,6 @@ impl Display for Error {
         match self {
             Error::Io(e) => e.fmt(fmt),
             Error::Cbor(e) => e.fmt(fmt),
-            Error::__NonExhaustive__ => unreachable!(),
         }
     }
 }
@@ -64,7 +61,6 @@ impl ErrorTrait for Error {
         match self {
             Error::Io(e) => Some(e),
             Error::Cbor(e) => Some(e),
-            Error::__NonExhaustive__ => unreachable!(),
         }
     }
 }
@@ -202,31 +198,13 @@ impl<Item: Serialize> Default for Encoder<Item> {
     }
 }
 
-/// The Cbor serializer wants a writer, we provide one by wrapping `BytesMut`.
-///
-/// As of writing this code, `BytesMut` doesn't know how to be a writer itself. This may change,
-/// there's an open issue for it: https://github.com/carllerche/bytes/issues/77.
-struct BytesWriter<'a>(&'a mut BytesMut);
-
-impl<'a> Write for BytesWriter<'a> {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.0.extend(buf);
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> IoResult<()> {
-        Ok(())
-    }
-}
-
-impl<Item: Serialize> IoEncoder for Encoder<Item> {
-    type Item = Item;
+impl<Item: Serialize> IoEncoder<Item> for Encoder<Item> {
     type Error = Error;
     fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Error> {
-        let writer = BytesWriter(dst);
         let mut serializer = if self.packed {
-            Serializer::new(IoWrite::new(writer)).packed_format()
+            Serializer::new(IoWrite::new(dst.writer())).packed_format()
         } else {
-            Serializer::new(IoWrite::new(writer))
+            Serializer::new(IoWrite::new(dst.writer()))
         };
         if self.sd != SdMode::Never {
             serializer.self_describe()?;
@@ -289,8 +267,7 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
     }
 }
 
-impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
-    type Item = Enc;
+impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder<Enc> for Codec<Dec, Enc> {
     type Error = Error;
     fn encode(&mut self, item: Enc, dst: &mut BytesMut) -> Result<(), Error> {
         self.enc.encode(item, dst)
@@ -301,8 +278,6 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
 mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
-
-    use serde_cbor;
 
     use super::*;
 
@@ -365,7 +340,7 @@ mod tests {
     }
 
     /// Test encoding.
-    fn encode<Enc: IoEncoder<Item = TestData, Error = Error>>(enc: Enc) {
+    fn encode<Enc: IoEncoder<TestData, Error = Error>>(enc: Enc) {
         let mut encoder = enc;
         let data = test_data();
         let mut buffer = BytesMut::with_capacity(0);
