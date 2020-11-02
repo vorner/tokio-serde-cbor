@@ -26,14 +26,14 @@ fn test_data() -> TestData {
 /// This is similar to UnixStream::socket_pair, but works on windows too.
 async fn socket_pair() -> Result<(TcpStream, TcpStream), AppError> {
     // port 0 = let the OS choose
-    let mut listener = TcpListener::bind("127.0.0.1:0").await?;
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
     let stream1 = TcpStream::connect(listener.local_addr()?).await?;
     let stream2 = listener.accept().await?.0;
 
     Ok((stream1, stream2))
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), AppError> {
     // This creates a pair of TCP domain sockets that are connected together.
     let (sender_socket, receiver_socket) = socket_pair().await?;

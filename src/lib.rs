@@ -218,8 +218,7 @@ impl<'a> Write for BytesWriter<'a> {
     }
 }
 
-impl<Item: Serialize> IoEncoder for Encoder<Item> {
-    type Item = Item;
+impl<Item: Serialize> IoEncoder<Item> for Encoder<Item> {
     type Error = Error;
     fn encode(&mut self, item: Item, dst: &mut BytesMut) -> Result<(), Error> {
         let writer = BytesWriter(dst);
@@ -289,8 +288,7 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoDecoder for Codec<Dec, Enc> {
     }
 }
 
-impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder for Codec<Dec, Enc> {
-    type Item = Enc;
+impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder<Enc> for Codec<Dec, Enc> {
     type Error = Error;
     fn encode(&mut self, item: Enc, dst: &mut BytesMut) -> Result<(), Error> {
         self.enc.encode(item, dst)
@@ -365,7 +363,7 @@ mod tests {
     }
 
     /// Test encoding.
-    fn encode<Enc: IoEncoder<Item = TestData, Error = Error>>(enc: Enc) {
+    fn encode<Enc: IoEncoder<TestData, Error = Error>>(enc: Enc) {
         let mut encoder = enc;
         let data = test_data();
         let mut buffer = BytesMut::with_capacity(0);
