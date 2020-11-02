@@ -29,11 +29,10 @@ use tokio_util::codec::{Decoder as IoDecoder, Encoder as IoEncoder};
 
 /// Errors returned by encoding and decoding.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     Io(IoError),
     Cbor(CborError),
-    #[doc(hidden)]
-    __NonExhaustive__,
 }
 
 impl From<IoError> for Error {
@@ -53,7 +52,6 @@ impl Display for Error {
         match self {
             Error::Io(e) => e.fmt(fmt),
             Error::Cbor(e) => e.fmt(fmt),
-            Error::__NonExhaustive__ => unreachable!(),
         }
     }
 }
@@ -63,7 +61,6 @@ impl ErrorTrait for Error {
         match self {
             Error::Io(e) => Some(e),
             Error::Cbor(e) => Some(e),
-            Error::__NonExhaustive__ => unreachable!(),
         }
     }
 }
@@ -281,8 +278,6 @@ impl<'de, Dec: Deserialize<'de>, Enc: Serialize> IoEncoder<Enc> for Codec<Dec, E
 mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
-
-    use serde_cbor;
 
     use super::*;
 

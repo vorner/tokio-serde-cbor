@@ -66,7 +66,7 @@ async fn main() -> Result<(), AppError> {
     // for each frame, thus for each entire object we receive.
     let recv_all = receiver.for_each(|msg| {
         println!("Received: {:#?}", msg);
-        return future::ready(());
+        future::ready(())
     });
 
     // temporary variable here is type hint for Rust
