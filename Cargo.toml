@@ -1,6 +1,6 @@
 [package]
 name = "tokio-serde-cbor"
-version = "0.4.0"
+version = "0.5.0"
 authors = [
     "Michal 'vorner' Vaner <vorner@vorner.cz>",
     "Vadym S. Khondar <vadym@khondar.name>",
