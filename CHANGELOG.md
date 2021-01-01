@@ -1,3 +1,8 @@
+# 0.6.0
+
+* Update to tokio 1.0.
+* Update to tokio-util 0.6.
+* Update to bytes 1.0.
 
 # 0.5.0
 
