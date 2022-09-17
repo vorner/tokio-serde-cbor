@@ -1,3 +1,7 @@
+# 0.7.0
+
+* Update tokio-util to 0.7.
+
 # 0.6.0
 
 * Update to tokio 1.0.
